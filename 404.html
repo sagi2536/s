@@ -21,26 +21,26 @@
   <div id="msg">กำลังพาไป…</div>
 </div>
 <script>
-(function () {
-  var parts = location.pathname.split('/').filter(Boolean);
-  var code  = parts.length ? parts[parts.length - 1] : '';
-  // project page (repo = ส่วนแรกของ path) -> base = /repo/ ; user page -> base = /
-  var base  = parts.length > 1 ? '/' + parts[0] + '/' : '/';
+  // 🔧 วาง URL /exec ของ GAS ที่ deploy ไว้ตรงนี้
+  var API = 'https://script.google.com/macros/s/AKfycbyWwsn83rFAaax2Sc6WutKCUeyLnhvDfwDyC7MHJ9K9Z2NOUIpz_Oca8rVRAexzMsZz_A/exec';
 
-  function fail(html) { document.getElementById('box').innerHTML = html; }
+  (function () {
+    var parts = location.pathname.split('/').filter(Boolean);
+    var code  = parts.length ? parts[parts.length - 1] : '';
+    var base  = parts.length > 1 ? '/' + parts[0] + '/' : '/';
 
-  if (!code) { fail('<h2>ไม่พบรหัสลิงก์</h2>'); return; }
+    function fail(html) { document.getElementById('box').innerHTML = html; }
+    if (!code) { fail('<h2>ไม่พบรหัสลิงก์</h2>'); return; }
 
-  fetch(base + 'links.json?_=' + Date.now())
-    .then(function (r) { return r.json(); })
-    .then(function (map) {
-      var url = map[code];
-      if (url) { location.replace(url); }
-      else { fail('<h2>ไม่พบลิงก์</h2><p>รหัส: <b>' + code + '</b></p>' +
-                  '<p><a href="' + base + '">ดูลิงก์ทั้งหมด</a></p>'); }
-    })
-    .catch(function () { fail('<h2>โหลดข้อมูลไม่สำเร็จ</h2>'); });
-})();
+    fetch(API + '?c=' + encodeURIComponent(code))
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (d.ok && d.url) { location.replace(d.url); }
+        else { fail('<h2>ไม่พบลิงก์</h2><p>รหัส: <b>' + code + '</b></p>' +
+                    '<p><a href="' + base + '">ดูลิงก์ทั้งหมด</a></p>'); }
+      })
+      .catch(function () { fail('<h2>เชื่อมต่อฐานข้อมูลไม่สำเร็จ</h2>'); });
+  })();
 </script>
 </body>
 </html>
