@@ -3,142 +3,22 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Short URL — จัดการลิงก์</title>
-<link href="https://fonts.googleapis.com/css2?family=Anuphan:wght@400;500;600&display=swap" rel="stylesheet">
-<link href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<title>ระบบย่อลิงก์</title>
 <style>
-  * { box-sizing: border-box; }
-  body { font-family: 'Anuphan', sans-serif; background: #f1f5f9; color: #0f172a; margin: 0; padding: 16px; }
-  .wrap { max-width: 760px; margin: 0 auto; }
-  h1 { font-size: 20px; font-weight: 600; margin: 4px 0 14px; }
-  .card { background: #fff; border-radius: 14px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.08); margin-bottom: 16px; }
-  label { display: block; font-size: 13px; font-weight: 500; margin: 10px 0 4px; }
-  input { width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 10px; font-family: inherit; font-size: 15px; }
-  button { background: #0d9488; color: #fff; border: 0; border-radius: 10px; padding: 11px 16px; font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer; }
-  button:disabled { opacity: .6; }
-  .full { width: 100%; margin-top: 14px; }
-  .item { border-top: 1px solid #e2e8f0; padding: 12px 0; }
-  .item:first-child { border-top: 0; }
-  .short { color: #0d9488; font-weight: 600; word-break: break-all; }
-  .long { font-size: 12px; color: #64748b; word-break: break-all; margin-top: 2px; }
-  .meta { font-size: 12px; color: #94a3b8; margin-top: 4px; }
-  .row-btns { margin-top: 8px; display: flex; gap: 8px; }
-  .row-btns button { padding: 6px 12px; font-size: 13px; }
-  .copy { background: #475569; }
-  .del { background: #ef4444; }
-  .hint { font-size: 12px; color: #94a3b8; margin-top: 6px; }
+  body { font-family: system-ui, sans-serif; background: #f1f5f9; color: #334155;
+         display: flex; min-height: 100vh; align-items: center; justify-content: center;
+         margin: 0; text-align: center; }
+  .spin { width: 34px; height: 34px; border: 3px solid #cbd5e1; border-top-color: #0d9488;
+          border-radius: 50%; animation: r .8s linear infinite; }
+  @keyframes r { to { transform: rotate(360deg); } }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <h1>🔗 จัดการลิงก์ย่อ</h1>
-
-  <div class="card">
-    <label>URL ปลายทาง</label>
-    <input id="url" placeholder="https://...">
-    <label>รหัสย่อ</label>
-    <input id="code" placeholder="เช่น register (ปล่อยว่าง = สุ่มให้)">
-    <label>หมายเหตุ (ไม่บังคับ)</label>
-    <input id="note" placeholder="เช่น ประกาศรับสมัคร">
-    <button class="full" id="addBtn">เพิ่มลิงก์</button>
-    <div class="hint">เพิ่มแล้วเซฟลง Google Sheet ทันที ไม่ต้อง push</div>
-  </div>
-
-  <div class="card"><div id="list">กำลังโหลด…</div></div>
-</div>
-
+<div class="spin"></div>
 <script>
-  var API = 'https://script.google.com/macros/s/AKfycbyWwsn83rFAaax2Sc6WutKCUeyLnhvDfwDyC7MHJ9K9Z2NOUIpz_Oca8rVRAexzMsZz_A/exec';
-
-  // เรียก API ผ่าน JSONP (เลี่ยง CORS ของ Workspace)
-  function jsonp(params) {
-    return new Promise(function (resolve, reject) {
-      var cb = 'cb_' + Date.now() + '_' + Math.floor(Math.random() * 100000);
-      var s = document.createElement('script');
-      var timer = setTimeout(function () { cleanup(); reject(new Error('timeout')); }, 15000);
-      function cleanup() { clearTimeout(timer); delete window[cb]; if (s.parentNode) s.parentNode.removeChild(s); }
-      window[cb] = function (data) { cleanup(); resolve(data); };
-      var q = Object.keys(params).map(function (k) {
-        return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
-      }).join('&');
-      s.src = API + '?' + q + '&callback=' + cb;
-      s.onerror = function () { cleanup(); reject(new Error('network')); };
-      document.body.appendChild(s);
-    });
-  }
-
-  function baseUrl() {
-    var p = location.pathname;
-    if (p.slice(-1) !== '/') p = p.replace(/[^/]*$/, '');
-    return location.origin + p;   // เช่น https://sagi2536.github.io/s/
-  }
-
-  document.addEventListener('DOMContentLoaded', function () {
-    document.getElementById('addBtn').addEventListener('click', addLink);
-    load();
-  });
-
-  function load() {
-    jsonp({ action: 'list' })
-      .then(function (d) { render(d.links || []); })
-      .catch(function () { document.getElementById('list').textContent = 'โหลดข้อมูลไม่สำเร็จ'; });
-  }
-
-  function addLink() {
-    var url = document.getElementById('url').value.trim();
-    var code = document.getElementById('code').value.trim();
-    var note = document.getElementById('note').value.trim();
-    if (!/^https?:\/\//i.test(url)) { Swal.fire('URL ต้องขึ้นต้นด้วย http:// หรือ https://', '', 'warning'); return; }
-    var btn = document.getElementById('addBtn');
-    btn.disabled = true; btn.textContent = 'กำลังบันทึก…';
-    jsonp({ action: 'add', url: url, code: code, note: note })
-      .then(function (d) {
-        btn.disabled = false; btn.textContent = 'เพิ่มลิงก์';
-        if (!d.ok) { Swal.fire('เพิ่มไม่สำเร็จ', d.error || '', 'error'); return; }
-        document.getElementById('url').value = '';
-        document.getElementById('code').value = '';
-        document.getElementById('note').value = '';
-        Swal.fire({ icon: 'success', title: 'บันทึกแล้ว', html: '<b class="short">' + baseUrl() + d.code + '</b>' });
-        load();
-      })
-      .catch(function () { btn.disabled = false; btn.textContent = 'เพิ่มลิงก์'; Swal.fire('เชื่อมต่อไม่สำเร็จ', '', 'error'); });
-  }
-
-  function delLink(code) {
-    Swal.fire({ title: 'ลบ "' + code + '"?', icon: 'warning', showCancelButton: true,
-                confirmButtonText: 'ลบ', cancelButtonText: 'ยกเลิก', confirmButtonColor: '#ef4444' })
-      .then(function (r) {
-        if (!r.isConfirmed) return;
-        jsonp({ action: 'delete', code: code }).then(load);
-      });
-  }
-
-  function render(rows) {
-    var box = document.getElementById('list');
-    if (!rows.length) { box.textContent = 'ยังไม่มีลิงก์'; return; }
-    box.innerHTML = '';
-    rows.forEach(function (r) {
-      var full = baseUrl() + r.code;
-      var d = document.createElement('div');
-      d.className = 'item';
-      d.innerHTML = '<div class="short">' + full + '</div>' +
-                    '<div class="long">→ ' + r.url + '</div>' +
-                    '<div class="meta">' + r.clicks + ' คลิก · ' + r.created + (r.note ? ' · ' + r.note : '') + '</div>' +
-                    '<div class="row-btns"><button class="copy">คัดลอก</button><button class="del">ลบ</button></div>';
-      d.querySelector('.copy').addEventListener('click', function () { copyText(full); });
-      d.querySelector('.del').addEventListener('click', function () { delLink(r.code); });
-      box.appendChild(d);
-    });
-  }
-
-  function copyText(t) {
-    var ta = document.createElement('textarea');
-    ta.value = t; document.body.appendChild(ta); ta.select();
-    try { document.execCommand('copy'); Swal.fire({ icon: 'success', title: 'คัดลอกแล้ว', timer: 900, showConfirmButton: false }); }
-    catch (e) { Swal.fire('คัดลอกไม่สำเร็จ', '', 'info'); }
-    document.body.removeChild(ta);
-  }
+  // เปิดหน้าจัดการ (อยู่บน GAS)
+  var GAS = 'https://script.google.com/macros/s/AKfycbyWwsn83rFAaax2Sc6WutKCUeyLnhvDfwDyC7MHJ9K9Z2NOUIpz_Oca8rVRAexzMsZz_A/exec';
+  window.location.replace(GAS);
 </script>
 </body>
 </html>
