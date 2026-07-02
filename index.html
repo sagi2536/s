@@ -3,22 +3,150 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ระบบย่อลิงก์</title>
+<title>Short URL — จัดการลิงก์</title>
+<link href="https://fonts.googleapis.com/css2?family=Anuphan:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <style>
-  body { font-family: system-ui, sans-serif; background: #f1f5f9; color: #334155;
-         display: flex; min-height: 100vh; align-items: center; justify-content: center;
-         margin: 0; text-align: center; }
-  .spin { width: 34px; height: 34px; border: 3px solid #cbd5e1; border-top-color: #0d9488;
-          border-radius: 50%; animation: r .8s linear infinite; }
-  @keyframes r { to { transform: rotate(360deg); } }
+  * { box-sizing: border-box; }
+  body { font-family: 'Anuphan', sans-serif; background: #f1f5f9; color: #0f172a; margin: 0; padding: 16px; }
+  .wrap { max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 20px; font-weight: 600; margin: 4px 0 6px; }
+  .sub { font-size: 13px; color: #64748b; margin-bottom: 14px; }
+  .card { background: #fff; border-radius: 14px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.08); margin-bottom: 16px; }
+  label { display: block; font-size: 13px; font-weight: 500; margin: 10px 0 4px; }
+  input { width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 10px; font-family: inherit; font-size: 15px; }
+  button { background: #0d9488; color: #fff; border: 0; border-radius: 10px; padding: 11px 16px; font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer; }
+  .full { width: 100%; margin-top: 14px; }
+  a.sheet { display: inline-block; margin-top: 10px; color: #0d9488; font-weight: 500; font-size: 14px; }
+  .item { border-top: 1px solid #e2e8f0; padding: 12px 0; }
+  .item:first-child { border-top: 0; }
+  .short { color: #0d9488; font-weight: 600; word-break: break-all; }
+  .long { font-size: 12px; color: #64748b; word-break: break-all; margin-top: 2px; }
+  .meta { font-size: 12px; color: #94a3b8; margin-top: 4px; }
+  .copy { background: #475569; padding: 6px 12px; font-size: 13px; margin-top: 8px; }
+  .hint { font-size: 12px; color: #94a3b8; margin-top: 6px; }
+  .box { background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 10px; padding: 12px; margin-top: 12px; display: none; }
+  .box b { color: #0f172a; }
+  code { background: #e2e8f0; padding: 2px 6px; border-radius: 6px; font-size: 13px; word-break: break-all; }
 </style>
 </head>
 <body>
-<div class="spin"></div>
+<div class="wrap">
+  <h1>🔗 จัดการลิงก์ย่อ</h1>
+  <div class="sub">ข้อมูลอ่านจาก Google Sheet (published CSV) — เพิ่มลิงก์โดยพิมพ์แถวในชีต</div>
+
+  <div class="card">
+    <b>สร้างรหัสลิงก์ใหม่</b>
+    <label>URL ปลายทาง</label>
+    <input id="url" placeholder="https://...">
+    <label>รหัสย่อ (ปล่อยว่าง = สุ่มให้)</label>
+    <input id="code" placeholder="เช่น register">
+    <button class="full" id="genBtn">สร้างรหัส + เตรียมข้อมูลลงชีต</button>
+    <div class="box" id="out"></div>
+    <a class="sheet" id="sheetLink" href="https://docs.google.com/spreadsheets/d/1QqMNM39OEtilZ4ETTfNuegCcQC3A39qIBmIIt3biXq8/edit" target="_blank">📄 เปิด Google Sheet เพื่อวางแถวใหม่ →</a>
+    <div class="hint">คัดลอกค่าที่ได้ไปวางเป็นแถวใหม่ในชีต (คอลัมน์ code, url) แล้วลิงก์จะใช้ได้ใน 1–2 นาที</div>
+  </div>
+
+  <div class="card"><div id="list">กำลังโหลด…</div></div>
+</div>
+
 <script>
-  // เปิดหน้าจัดการ (อยู่บน GAS)
-  var GAS = 'https://script.google.com/macros/s/AKfycby_zdzZxFUmmM2pvwDB6gunNZt1tHYgcMBCO_8hXbJMkwffw_f9xTmxS4_4QvgUeQc7DQ/exec';
-  window.location.replace(GAS);
+  var CSV = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTsYRO4nUqWAkHD5cDwWcLPhY_Bb5d__y_F3iULO6SPz3hcrnHnCxbYTQwFpKKAFNyD_bRZIAEc-kTS/pub?gid=0&single=true&output=csv';
+
+  function baseUrl() {
+    var p = location.pathname;
+    if (p.slice(-1) !== '/') p = p.replace(/[^/]*$/, '');
+    return location.origin + p;
+  }
+
+  function parseCSV(text) {
+    var rows = [], row = [], cur = '', q = false;
+    for (var i = 0; i < text.length; i++) {
+      var ch = text[i];
+      if (q) { if (ch === '"') { if (text[i+1] === '"') { cur += '"'; i++; } else q = false; } else cur += ch; }
+      else {
+        if (ch === '"') q = true;
+        else if (ch === ',') { row.push(cur); cur = ''; }
+        else if (ch === '\n') { row.push(cur); rows.push(row); row = []; cur = ''; }
+        else if (ch === '\r') {}
+        else cur += ch;
+      }
+    }
+    if (cur !== '' || row.length) { row.push(cur); rows.push(row); }
+    return rows;
+  }
+
+  var existingCodes = {};
+
+  document.addEventListener('DOMContentLoaded', function () {
+    document.getElementById('genBtn').addEventListener('click', gen);
+    load();
+  });
+
+  function load() {
+    fetch(CSV + '&_=' + Date.now())
+      .then(function (r) { return r.text(); })
+      .then(function (text) { render(parseCSV(text)); })
+      .catch(function () { document.getElementById('list').textContent = 'โหลดข้อมูลไม่สำเร็จ'; });
+  }
+
+  function randCode() {
+    var c = 'abcdefghijkmnpqrstuvwxyz23456789', s = '';
+    for (var i = 0; i < 5; i++) s += c.charAt(Math.floor(Math.random() * c.length));
+    return s;
+  }
+
+  function gen() {
+    var url = document.getElementById('url').value.trim();
+    var code = document.getElementById('code').value.trim();
+    if (!/^https?:\/\//i.test(url)) { Swal.fire('URL ต้องขึ้นต้นด้วย http:// หรือ https://', '', 'warning'); return; }
+    if (code && !/^[A-Za-z0-9_-]+$/.test(code)) { Swal.fire('รหัสใช้ได้เฉพาะ a-z A-Z 0-9 _ -', '', 'warning'); return; }
+    if (!code) { do { code = randCode(); } while (existingCodes[code]); }
+    if (existingCodes[code]) { Swal.fire('รหัส "' + code + '" ถูกใช้แล้ว', '', 'error'); return; }
+    var out = document.getElementById('out');
+    out.style.display = 'block';
+    out.innerHTML = '<b>ลิงก์ย่อ:</b><br><span class="short">' + baseUrl() + code + '</span>' +
+                    '<br><br><b>วางลงชีตแถวใหม่:</b><br>คอลัมน์ code = <code>' + code + '</code><br>คอลัมน์ url = <code>' + url + '</code>' +
+                    '<br><button class="copy" id="c1">คัดลอก code</button> <button class="copy" id="c2">คัดลอก url</button>';
+    document.getElementById('c1').addEventListener('click', function () { copyText(code); });
+    document.getElementById('c2').addEventListener('click', function () { copyText(url); });
+  }
+
+  function render(rows) {
+    existingCodes = {};
+    var box = document.getElementById('list');
+    if (!rows.length || rows.length < 2) { box.textContent = 'ยังไม่มีลิงก์'; return; }
+    var header = rows[0].map(function (h) { return String(h).trim(); });
+    var ci = header.indexOf('code'), ui = header.indexOf('url'),
+        ni = header.indexOf('note'), cli = header.indexOf('clicks');
+    box.innerHTML = '';
+    for (var i = 1; i < rows.length; i++) {
+      var r = rows[i];
+      var code = r[ci] ? String(r[ci]).trim() : '';
+      if (!code) continue;
+      existingCodes[code] = true;
+      var full = baseUrl() + code;
+      var url = ui >= 0 ? String(r[ui] || '').trim() : '';
+      var note = ni >= 0 ? String(r[ni] || '').trim() : '';
+      var d = document.createElement('div');
+      d.className = 'item';
+      d.innerHTML = '<div class="short">' + full + '</div>' +
+                    '<div class="long">→ ' + url + '</div>' +
+                    (note ? '<div class="meta">' + note + '</div>' : '') +
+                    '<button class="copy">คัดลอก</button>';
+      (function (f) { d.querySelector('.copy').addEventListener('click', function () { copyText(f); }); })(full);
+      box.appendChild(d);
+    }
+  }
+
+  function copyText(t) {
+    var ta = document.createElement('textarea');
+    ta.value = t; document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); Swal.fire({ icon: 'success', title: 'คัดลอกแล้ว', timer: 900, showConfirmButton: false }); }
+    catch (e) { Swal.fire('คัดลอกไม่สำเร็จ', '', 'info'); }
+    document.body.removeChild(ta);
+  }
 </script>
 </body>
 </html>
