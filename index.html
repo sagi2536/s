@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Short URL — จัดการลิงก์</title>
+<link href="https://fonts.googleapis.com/css2?family=Anuphan:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: 'Anuphan', sans-serif; background: #f1f5f9; color: #0f172a; margin: 0; padding: 16px; }
+  .wrap { max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 20px; font-weight: 600; margin: 4px 0 14px; }
+  .card { background: #fff; border-radius: 14px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.08); margin-bottom: 16px; }
+  label { display: block; font-size: 13px; font-weight: 500; margin: 10px 0 4px; }
+  input, textarea { width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 10px;
+                    font-family: inherit; font-size: 15px; }
+  textarea { font-family: ui-monospace, monospace; font-size: 13px; min-height: 140px; }
+  button { background: #0d9488; color: #fff; border: 0; border-radius: 10px; padding: 11px 16px;
+           font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer; }
+  .full { width: 100%; margin-top: 14px; }
+  .banner { background: #fef3c7; border: 1px solid #fde68a; color: #92400e; border-radius: 10px;
+            padding: 10px 12px; font-size: 13px; margin-bottom: 16px; display: none; }
+  .item { border-top: 1px solid #e2e8f0; padding: 12px 0; }
+  .item:first-child { border-top: 0; }
+  .short { color: #0d9488; font-weight: 600; word-break: break-all; }
+  .long { font-size: 12px; color: #64748b; word-break: break-all; margin-top: 2px; }
+  .row-btns { margin-top: 8px; display: flex; gap: 8px; }
+  .row-btns button { padding: 6px 12px; font-size: 13px; }
+  .copy { background: #475569; }
+  .del { background: #ef4444; }
+  .hint { font-size: 12px; color: #94a3b8; margin-top: 6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🔗 จัดการลิงก์ย่อ</h1>
+
+  <div class="banner" id="banner">⚠️ มีการเปลี่ยนแปลงที่ยังไม่ได้บันทึก — คัดลอก <b>links.json</b> ด้านล่างไป push ขึ้น git ไม่งั้นจะหาย</div>
+
+  <div class="card">
+    <label>URL ปลายทาง</label>
+    <input id="url" placeholder="https://...">
+    <label>รหัสย่อ</label>
+    <input id="code" placeholder="เช่น register (ปล่อยว่าง = สุ่มให้)">
+    <button class="full" id="addBtn">เพิ่มลิงก์</button>
+    <div class="hint">รหัสใช้ได้เฉพาะ a-z A-Z 0-9 _ - และห้ามซ้ำของเดิม</div>
+  </div>
+
+  <div class="card"><div id="list">กำลังโหลด…</div></div>
+
+  <div class="card">
+    <label>links.json (ทั้งไฟล์ — คัดลอกไปวางทับของเดิมแล้ว push)</label>
+    <textarea id="json" readonly></textarea>
+    <button class="full copy" id="copyJson">📋 คัดลอก links.json ทั้งไฟล์</button>
+  </div>
+</div>
+
+<script>
+  var links = {};
+
+  function baseUrl() {
+    var p = location.pathname;
+    if (p.slice(-1) !== '/') p = p.replace(/[^/]*$/, '');   // ตัดชื่อไฟล์ออก
+    return location.origin + p;                              // เช่น https://sagi2536.github.io/s/
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    document.getElementById('addBtn').addEventListener('click', addLink);
+    document.getElementById('copyJson').addEventListener('click', function () {
+      copyText(document.getElementById('json').value);
+    });
+    load();
+  });
+
+  function load() {
+    fetch('links.json?_=' + Date.now())
+      .then(function (r) { return r.ok ? r.json() : {}; })
+      .then(function (m) { links = m || {}; render(); })
+      .catch(function () { links = {}; render(); });
+  }
+
+  function randCode() {
+    var c = 'abcdefghijkmnpqrstuvwxyz23456789', s = '';
+    for (var i = 0; i < 5; i++) s += c.charAt(Math.floor(Math.random() * c.length));
+    return s;
+  }
+
+  function addLink() {
+    var url = document.getElementById('url').value.trim();
+    var code = document.getElementById('code').value.trim();
+    if (!/^https?:\/\//i.test(url)) { Swal.fire('URL ต้องขึ้นต้นด้วย http:// หรือ https://', '', 'warning'); return; }
+    if (code && !/^[A-Za-z0-9_-]+$/.test(code)) { Swal.fire('รหัสใช้ได้เฉพาะ a-z A-Z 0-9 _ -', '', 'warning'); return; }
+    if (!code) { do { code = randCode(); } while (links[code]); }
+    if (links[code]) { Swal.fire('รหัส "' + code + '" ถูกใช้ไปแล้ว', '', 'error'); return; }
+    links[code] = url;
+    document.getElementById('url').value = '';
+    document.getElementById('code').value = '';
+    render();
+    Swal.fire({ icon: 'success', title: 'เพิ่มแล้ว', html: '<b class="short">' + baseUrl() + code + '</b>' });
+  }
+
+  function delLink(code) {
+    Swal.fire({ title: 'ลบ "' + code + '"?', icon: 'warning', showCancelButton: true,
+                confirmButtonText: 'ลบ', cancelButtonText: 'ยกเลิก', confirmButtonColor: '#ef4444' })
+      .then(function (r) { if (r.isConfirmed) { delete links[code]; render(); } });
+  }
+
+  function render() {
+    var box = document.getElementById('list');
+    var codes = Object.keys(links);
+    box.innerHTML = codes.length ? '' : 'ยังไม่มีลิงก์';
+    codes.forEach(function (code) {
+      var full = baseUrl() + code;
+      var d = document.createElement('div');
+      d.className = 'item';
+      d.innerHTML = '<div class="short">' + full + '</div><div class="long">→ ' + links[code] + '</div>' +
+                    '<div class="row-btns"><button class="copy">คัดลอก</button><button class="del">ลบ</button></div>';
+      d.querySelector('.copy').addEventListener('click', function () { copyText(full); });
+      d.querySelector('.del').addEventListener('click', function () { delLink(code); });
+      box.appendChild(d);
+    });
+    document.getElementById('json').value = JSON.stringify(links, null, 2) + '\n';
+    document.getElementById('banner').style.display = 'block';
+  }
+
+  function copyText(t) {
+    var ta = document.createElement('textarea');
+    ta.value = t; document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); Swal.fire({ icon: 'success', title: 'คัดลอกแล้ว', timer: 900, showConfirmButton: false }); }
+    catch (e) { Swal.fire('คัดลอกไม่สำเร็จ', '', 'info'); }
+    document.body.removeChild(ta);
+  }
+</script>
+</body>
+</html>
