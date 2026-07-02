@@ -49,22 +49,29 @@
 </div>
 
 <script>
-  // 🔧 วาง URL /exec ของ GAS ที่ deploy ไว้ตรงนี้ (ตัวเดียวกับใน 404.html)
   var API = 'https://script.google.com/macros/s/AKfycbyWwsn83rFAaax2Sc6WutKCUeyLnhvDfwDyC7MHJ9K9Z2NOUIpz_Oca8rVRAexzMsZz_A/exec';
+
+  // เรียก API ผ่าน JSONP (เลี่ยง CORS ของ Workspace)
+  function jsonp(params) {
+    return new Promise(function (resolve, reject) {
+      var cb = 'cb_' + Date.now() + '_' + Math.floor(Math.random() * 100000);
+      var s = document.createElement('script');
+      var timer = setTimeout(function () { cleanup(); reject(new Error('timeout')); }, 15000);
+      function cleanup() { clearTimeout(timer); delete window[cb]; if (s.parentNode) s.parentNode.removeChild(s); }
+      window[cb] = function (data) { cleanup(); resolve(data); };
+      var q = Object.keys(params).map(function (k) {
+        return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
+      }).join('&');
+      s.src = API + '?' + q + '&callback=' + cb;
+      s.onerror = function () { cleanup(); reject(new Error('network')); };
+      document.body.appendChild(s);
+    });
+  }
 
   function baseUrl() {
     var p = location.pathname;
     if (p.slice(-1) !== '/') p = p.replace(/[^/]*$/, '');
     return location.origin + p;   // เช่น https://sagi2536.github.io/s/
-  }
-
-  // POST แบบ text/plain เพื่อเลี่ยง CORS preflight ของ GAS
-  function apiPost(payload) {
-    return fetch(API, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(payload)
-    }).then(function (r) { return r.json(); });
   }
 
   document.addEventListener('DOMContentLoaded', function () {
@@ -73,8 +80,7 @@
   });
 
   function load() {
-    fetch(API + '?action=list')
-      .then(function (r) { return r.json(); })
+    jsonp({ action: 'list' })
       .then(function (d) { render(d.links || []); })
       .catch(function () { document.getElementById('list').textContent = 'โหลดข้อมูลไม่สำเร็จ'; });
   }
@@ -86,7 +92,7 @@
     if (!/^https?:\/\//i.test(url)) { Swal.fire('URL ต้องขึ้นต้นด้วย http:// หรือ https://', '', 'warning'); return; }
     var btn = document.getElementById('addBtn');
     btn.disabled = true; btn.textContent = 'กำลังบันทึก…';
-    apiPost({ action: 'add', url: url, code: code, note: note })
+    jsonp({ action: 'add', url: url, code: code, note: note })
       .then(function (d) {
         btn.disabled = false; btn.textContent = 'เพิ่มลิงก์';
         if (!d.ok) { Swal.fire('เพิ่มไม่สำเร็จ', d.error || '', 'error'); return; }
@@ -104,7 +110,7 @@
                 confirmButtonText: 'ลบ', cancelButtonText: 'ยกเลิก', confirmButtonColor: '#ef4444' })
       .then(function (r) {
         if (!r.isConfirmed) return;
-        apiPost({ action: 'delete', code: code }).then(load);
+        jsonp({ action: 'delete', code: code }).then(load);
       });
   }
 

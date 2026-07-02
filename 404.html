@@ -21,19 +21,32 @@
   <div id="msg">กำลังพาไป…</div>
 </div>
 <script>
-  // 🔧 วาง URL /exec ของ GAS ที่ deploy ไว้ตรงนี้
   var API = 'https://script.google.com/macros/s/AKfycbyWwsn83rFAaax2Sc6WutKCUeyLnhvDfwDyC7MHJ9K9Z2NOUIpz_Oca8rVRAexzMsZz_A/exec';
+
+  function jsonp(params) {
+    return new Promise(function (resolve, reject) {
+      var cb = 'cb_' + Date.now() + '_' + Math.floor(Math.random() * 100000);
+      var s = document.createElement('script');
+      var timer = setTimeout(function () { cleanup(); reject(new Error('timeout')); }, 15000);
+      function cleanup() { clearTimeout(timer); delete window[cb]; if (s.parentNode) s.parentNode.removeChild(s); }
+      window[cb] = function (data) { cleanup(); resolve(data); };
+      var q = Object.keys(params).map(function (k) {
+        return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
+      }).join('&');
+      s.src = API + '?' + q + '&callback=' + cb;
+      s.onerror = function () { cleanup(); reject(new Error('network')); };
+      document.body.appendChild(s);
+    });
+  }
 
   (function () {
     var parts = location.pathname.split('/').filter(Boolean);
     var code  = parts.length ? parts[parts.length - 1] : '';
     var base  = parts.length > 1 ? '/' + parts[0] + '/' : '/';
-
     function fail(html) { document.getElementById('box').innerHTML = html; }
     if (!code) { fail('<h2>ไม่พบรหัสลิงก์</h2>'); return; }
 
-    fetch(API + '?c=' + encodeURIComponent(code))
-      .then(function (r) { return r.json(); })
+    jsonp({ c: code })
       .then(function (d) {
         if (d.ok && d.url) { location.replace(d.url); }
         else { fail('<h2>ไม่พบลิงก์</h2><p>รหัส: <b>' + code + '</b></p>' +
